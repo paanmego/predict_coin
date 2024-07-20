@@ -16,8 +16,11 @@ st.sidebar.title("메뉴")
 menu = st.sidebar.radio("선택하세요:", ["데이터 로드", "그래프", "분석"])
 
 cg = CoinGeckoAPI()
+# EMA 계산 함수 추가
+def calculate_ema(data, period, column='close'):
+    return data[column].ewm(span=period, adjust=False).mean()
 
-# 데이터 가져오기 함수
+
 @st.cache_data
 def get_data():
     max_retries = 5
@@ -26,7 +29,7 @@ def get_data():
     for attempt in range(max_retries):
         try:
             end_date = datetime.now()
-            start_date = end_date - timedelta(days=30)
+            start_date = end_date - timedelta(days=365)  # 1년치 데이터
             
             data = cg.get_coin_market_chart_range_by_id(
                 id='bitcoin',
@@ -45,6 +48,12 @@ def get_data():
             })
             df.columns = ['open', 'high', 'low', 'close']
             
+            # EMA 계산
+            df['EMA10'] = calculate_ema(df, 10)
+            df['EMA20'] = calculate_ema(df, 20)
+            df['EMA50'] = calculate_ema(df, 50)
+            df['EMA100'] = calculate_ema(df, 100)
+            
             return df
         except Exception as e:
             if attempt < max_retries - 1:
@@ -56,7 +65,7 @@ def get_data():
 
     return None
 
-# 그래프 생성 함수
+# 그래프 생성 함수 수정
 def create_graph(df):
     fig = go.Figure()
 
@@ -70,18 +79,21 @@ def create_graph(df):
         name='BTC/USD'
     ))
 
-    # 이동평균선 추가 (20일)
-    ma20 = df['close'].rolling(window=20).mean()
-    fig.add_trace(go.Scatter(
-        x=df.index,
-        y=ma20,
-        line=dict(color='orange', width=2),
-        name='20일 이동평균'
-    ))
+    # EMA 선 추가
+    ema_colors = ['blue', 'green', 'orange', 'red']
+    ema_periods = [10, 20, 50, 100]
+    
+    for period, color in zip(ema_periods, ema_colors):
+        fig.add_trace(go.Scatter(
+            x=df.index,
+            y=df[f'EMA{period}'],
+            line=dict(color=color, width=1),
+            name=f'EMA {period}'
+        ))
 
     # 레이아웃 설정
     fig.update_layout(
-        title='비트코인 가격 (최근 30일)',
+        title='비트코인 가격 및 EMA (최근 1년)',
         yaxis_title='가격 (USD)',
         xaxis_rangeslider_visible=False
     )
