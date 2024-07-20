@@ -17,23 +17,43 @@ menu = st.sidebar.radio("선택하세요:", ["데이터 로드", "그래프", "�
 # 데이터 가져오기 함수
 @st.cache_data
 def get_data():
-    exchange = ccxt.binance({
-        'enableRateLimit': True,
-        'options': {
-            'defaultType': 'future'
-        }
-    })
-    
-    end_date = exchange.milliseconds()
-    start_date = end_date - (30 * 24 * 60 * 60 * 1000)  # 30일
-    
-    ohlcv = exchange.fetch_ohlcv('BTC/USDT', '1d', start_date, limit=30)
-    
-    df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-    df.set_index('timestamp', inplace=True)
-    
-    return df
+    max_retries = 5
+    retry_delay = 5  # seconds
+
+    for attempt in range(max_retries):
+        try:
+            exchange = ccxt.binance({
+                'enableRateLimit': True,
+                'options': {
+                    'defaultType': 'future'
+                }
+            })
+            
+            end_date = exchange.milliseconds()
+            start_date = end_date - (30 * 24 * 60 * 60 * 1000)  # 30일
+            
+            ohlcv = exchange.fetch_ohlcv('BTC/USDT', '1d', start_date, limit=30)
+            
+            df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+            df.set_index('timestamp', inplace=True)
+            
+            return df
+        except ccxt.NetworkError as e:
+            if attempt < max_retries - 1:
+                st.warning(f"네트워크 오류 발생. {retry_delay}초 후 재시도합니다. (시도 {attempt + 1}/{max_retries})")
+                time.sleep(retry_delay)
+            else:
+                st.error("네트워크 오류가 지속됩니다. 나중에 다시 시도해주세요.")
+                raise e
+        except ccxt.ExchangeNotAvailable as e:
+            st.error("Binance 거래소를 사용할 수 없습니다. 잠시 후 다시 시도해주세요.")
+            raise e
+        except Exception as e:
+            st.error(f"알 수 없는 오류가 발생했습니다: {str(e)}")
+            raise e
+
+    return None
 
 # 그래프 생성 함수
 def create_graph(df):
@@ -96,11 +116,17 @@ def create_analysis(df):
 # 메인 로직
 if menu == "데이터 로드":
     if st.sidebar.button("데이터 로드"):
-        with st.spinner("데이터를 불러오는 중..."):
-            df = get_data()
-            st.session_state['data'] = df
-        st.success("데이터 로드 완료!")
-        st.write(df)
+        try:
+            with st.spinner("데이터를 불러오는 중..."):
+                df = get_data()
+            if df is not None:
+                st.session_state['data'] = df
+                st.success("데이터 로드 완료!")
+                st.write(df)
+            else:
+                st.error("데이터를 불러오는데 실패했습니다.")
+        except Exception as e:
+            st.error(f"데이터 로드 중 오류 발생: {str(e)}")
 
 elif menu == "그래프":
     if 'data' not in st.session_state:
