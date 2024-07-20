@@ -166,7 +166,7 @@ def create_analysis(df):
     return analysis_text
 
 # 메인 로직
-if menu == "데이터 로드":
+if main_menu == "데이터 로드":
     if st.sidebar.button("데이터 로드"):
         try:
             with st.spinner("데이터를 불러오는 중..."):
@@ -180,14 +180,14 @@ if menu == "데이터 로드":
         except Exception as e:
             st.error(f"데이터 로드 중 오류 발생: {str(e)}")
 
-elif menu == "그래프":
+elif main_menu == "그래프":
     if 'data' not in st.session_state:
         st.warning("먼저 데이터를 로드해주세요.")
     else:
         fig = create_graph(st.session_state['data'])
         st.plotly_chart(fig, use_container_width=True)
 
-elif menu == "분석":
+elif main_menu == "분석":
     if 'data' not in st.session_state:
         st.warning("먼저 데이터를 로드해주세요.")
     else:
