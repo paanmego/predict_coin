@@ -6,15 +6,46 @@ import time
 import plotly.graph_objs as go
 
 # Streamlit 페이지 설정
-st.set_page_config(page_title="비트코인 분석", layout="wide")
+st.set_page_config(page_title="비트코인 분석(Bryan Cho)", layout="wide")
 
 # 페이지 제목
 st.title("비트코인 분석 대시보드")
 
 # 사이드바 생성
 st.sidebar.title("메뉴")
-menu = st.sidebar.radio("선택하세요:", ["데이터 로드", "그래프", "분석"])
+main_menu = st.sidebar.radio("메인 메뉴:", ["데이터 로드", "그래프", "분석"])
 
+# AI 가격 예측 사이드바
+st.sidebar.title("AI 가격 예측")
+target_price = st.sidebar.number_input("목표 가격 (USD)", min_value=0.0, value=50000.0, step=100.0)
+position = st.sidebar.selectbox("포지션", ["롱", "숏"])
+leverage = st.sidebar.number_input("레버리지", min_value=1, max_value=100, value=1, step=1)
+
+if st.sidebar.button("분석"):
+    st.sidebar.empty()  # 기존 사이드바 내용 지우기
+    st.sidebar.subheader("AI 비트코인 가격 예측 결과")
+    st.sidebar.write(f"목표 가격: ${target_price:,.2f}")
+    st.sidebar.write(f"선택한 포지션: {position}")
+    st.sidebar.write(f"레버리지: {leverage}x")
+    
+    # AI 예측 결과 (예시)
+    st.sidebar.info("AI 모델이 비트코인 가격 데이터를 분석 중입니다...")
+    
+    # 예시 차트 (실제 AI 예측 결과로 대체 가능)
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=[1, 2, 3, 4, 5], y=[10, 11, 12, 13, 14], mode='lines+markers', name='예측 가격'))
+    fig.update_layout(title='AI 예측 비트코인 가격 추세 (예시)', xaxis_title='시간', yaxis_title='가격 (USD)')
+    st.sidebar.plotly_chart(fig, use_container_width=True)
+    
+    st.sidebar.markdown("### AI 예측 결과 해석")
+    st.sidebar.write("1. 단기 전망: 상승 추세")
+    st.sidebar.write("2. 중기 전망: 변동성 증가")
+    st.sidebar.write("3. 장기 전망: 불확실")
+    
+    st.sidebar.warning("주의: 이 예측은 예시이며, 실제 시장 상황과 다를 수 있습니다.")
+    
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("**현재 분석 알고리즘 수정중**")
 cg = CoinGeckoAPI()
 # EMA 계산 함수 추가
 def calculate_ema(data, period, column='close'):
@@ -43,18 +74,21 @@ def get_data():
             df.set_index('timestamp', inplace=True)
             
             # OHLC 데이터 생성
-            df = df.resample('D').agg({
+            df['date'] = df.index.date
+            ohlc = df.groupby('date').agg({
                 'price': ['first', 'max', 'min', 'last']
-            })
-            df.columns = ['open', 'high', 'low', 'close']
+            }).reset_index()
+            ohlc.columns = ['timestamp', 'open', 'high', 'low', 'close']
+            ohlc['timestamp'] = pd.to_datetime(ohlc['timestamp'])
+            ohlc.set_index('timestamp', inplace=True)
             
             # EMA 계산
-            df['EMA10'] = calculate_ema(df, 10)
-            df['EMA20'] = calculate_ema(df, 20)
-            df['EMA50'] = calculate_ema(df, 50)
-            df['EMA100'] = calculate_ema(df, 100)
+            ohlc['EMA10'] = calculate_ema(ohlc, 10)
+            ohlc['EMA20'] = calculate_ema(ohlc, 20)
+            ohlc['EMA50'] = calculate_ema(ohlc, 50)
+            ohlc['EMA100'] = calculate_ema(ohlc, 100)
             
-            return df
+            return ohlc
         except Exception as e:
             if attempt < max_retries - 1:
                 st.warning(f"오류 발생. {retry_delay}초 후 재시도합니다. (시도 {attempt + 1}/{max_retries})")
@@ -67,15 +101,20 @@ def get_data():
 
 # 그래프 생성 함수 수정
 def create_graph(df):
+
+    # 최근 3개월 데이터만 선택
+    three_months_ago = datetime.now() - timedelta(days=90)
+    df_recent = df[df.index >= three_months_ago]
+
     fig = go.Figure()
 
     # 캔들스틱 차트 추가
     fig.add_trace(go.Candlestick(
-        x=df.index,
-        open=df['open'],
-        high=df['high'],
-        low=df['low'],
-        close=df['close'],
+        x=df_recent.index,
+        open=df_recent['open'],
+        high=df_recent['high'],
+        low=df_recent['low'],
+        close=df_recent['close'],
         name='BTC/USD'
     ))
 
