@@ -5,6 +5,51 @@ from datetime import datetime, timedelta
 import time
 import plotly.graph_objs as go
 
+cg = CoinGeckoAPI()
+
+# EMA 계산 함수 추가
+def calculate_ema(data, period, column='close'):
+    return data[column].ewm(span=period, adjust=False).mean()
+
+@st.cache_data
+def get_data():
+    max_retries = 5
+    retry_delay = 5  # seconds
+
+    for attempt in range(max_retries):
+        try:
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=365)  # 1년치 데이터
+            
+            # OHLC 데이터 가져오기
+            ohlc_data = cg.get_coin_ohlc_by_id(
+                id='bitcoin',
+                vs_currency='usd',
+                days=90
+            )
+            
+            df = pd.DataFrame(ohlc_data, columns=['timestamp', 'open', 'high', 'low', 'close'])
+            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+            df.set_index('timestamp', inplace=True)
+            
+
+            # EMA 계산
+            df['EMA10'] = calculate_ema(df, 10)
+            df['EMA20'] = calculate_ema(df, 20)
+            df['EMA50'] = calculate_ema(df, 50)
+            df['EMA100'] = calculate_ema(df, 100)
+            
+            return df
+        except Exception as e:
+            if attempt < max_retries - 1:
+                st.warning(f"오류 발생. {retry_delay}초 후 재시도합니다. (시도 {attempt + 1}/{max_retries})")
+                time.sleep(retry_delay)
+            else:
+                st.error(f"데이터를 가져오는 중 오류가 발생했습니다: {str(e)}")
+                raise e
+
+    return None
+
 # Streamlit 페이지 설정
 st.set_page_config(page_title="비트코인 분석(Bryan Cho)", layout="wide")
 
@@ -60,75 +105,20 @@ if st.sidebar.button("분석"):
     st.sidebar.markdown("---")
     st.sidebar.markdown("**현재 분석 알고리즘 수정중**")
 
-cg = CoinGeckoAPI()
-# EMA 계산 함수 추가
-def calculate_ema(data, period, column='close'):
-    return data[column].ewm(span=period, adjust=False).mean()
 
 
-@st.cache_data
-def get_data():
-    max_retries = 5
-    retry_delay = 5  # seconds
-
-    for attempt in range(max_retries):
-        try:
-            end_date = datetime.now()
-            start_date = end_date - timedelta(days=365)  # 1년치 데이터
-            
-            data = cg.get_coin_market_chart_range_by_id(
-                id='bitcoin',
-                vs_currency='usd',
-                from_timestamp=int(start_date.timestamp()),
-                to_timestamp=int(end_date.timestamp())
-            )
-            
-            df = pd.DataFrame(data['prices'], columns=['timestamp', 'price'])
-            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-            df.set_index('timestamp', inplace=True)
-            
-            # OHLC 데이터 생성
-            df['date'] = df.index.date
-            ohlc = df.groupby('date').agg({
-                'price': ['first', 'max', 'min', 'last']
-            }).reset_index()
-            ohlc.columns = ['timestamp', 'open', 'high', 'low', 'close']
-            ohlc['timestamp'] = pd.to_datetime(ohlc['timestamp'])
-            ohlc.set_index('timestamp', inplace=True)
-            
-            # EMA 계산
-            ohlc['EMA10'] = calculate_ema(ohlc, 10)
-            ohlc['EMA20'] = calculate_ema(ohlc, 20)
-            ohlc['EMA50'] = calculate_ema(ohlc, 50)
-            ohlc['EMA100'] = calculate_ema(ohlc, 100)
-            
-            return ohlc
-        except Exception as e:
-            if attempt < max_retries - 1:
-                st.warning(f"오류 발생. {retry_delay}초 후 재시도합니다. (시도 {attempt + 1}/{max_retries})")
-                time.sleep(retry_delay)
-            else:
-                st.error(f"데이터를 가져오는 중 오류가 발생했습니다: {str(e)}")
-                raise e
-
-    return None
 
 # 그래프 생성 함수 수정
 def create_graph(df):
-
-    # 최근 3개월 데이터만 선택
-    three_months_ago = datetime.now() - timedelta(days=90)
-    df_recent = df[df.index >= three_months_ago]
-
     fig = go.Figure()
 
     # 캔들스틱 차트 추가
     fig.add_trace(go.Candlestick(
-        x=df_recent.index,
-        open=df_recent['open'],
-        high=df_recent['high'],
-        low=df_recent['low'],
-        close=df_recent['close'],
+        x=df.index,
+        open=df['open'],
+        high=df['high'],
+        low=df['low'],
+        close=df['close'],
         name='BTC/USD'
     ))
 
