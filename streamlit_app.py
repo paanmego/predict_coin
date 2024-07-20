@@ -1,5 +1,5 @@
 import streamlit as st
-import yfinance as yf
+import ccxt
 import plotly.graph_objs as go
 from datetime import datetime, timedelta
 import pandas as pd
@@ -17,12 +17,21 @@ menu = st.sidebar.radio("선택하세요:", ["데이터 로드", "그래프", "�
 # 데이터 가져오기 함수
 @st.cache_data
 def get_data():
-    end_date = datetime.now()
-    start_date = end_date - timedelta(days=30)
+    exchange = ccxt.binance({
+        'enableRateLimit': True,
+        'options': {
+            'defaultType': 'future'
+        }
+    })
     
-    # 비트코인 선물 데이터 (CME)
-    btc = yf.Ticker("BTC=F")
-    df = btc.history(start=start_date, end=end_date)
+    end_date = exchange.milliseconds()
+    start_date = end_date - (30 * 24 * 60 * 60 * 1000)  # 30일
+    
+    ohlcv = exchange.fetch_ohlcv('BTC/USDT', '1d', start_date, limit=30)
+    
+    df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+    df.set_index('timestamp', inplace=True)
     
     return df
 
@@ -33,15 +42,15 @@ def create_graph(df):
     # 캔들스틱 차트 추가
     fig.add_trace(go.Candlestick(
         x=df.index,
-        open=df['Open'],
-        high=df['High'],
-        low=df['Low'],
-        close=df['Close'],
+        open=df['open'],
+        high=df['high'],
+        low=df['low'],
+        close=df['close'],
         name='BTC 선물'
     ))
 
     # 이동평균선 추가 (20일)
-    ma20 = df['Close'].rolling(window=20).mean()
+    ma20 = df['close'].rolling(window=20).mean()
     fig.add_trace(go.Scatter(
         x=df.index,
         y=ma20,
@@ -52,7 +61,7 @@ def create_graph(df):
     # 레이아웃 설정
     fig.update_layout(
         title='비트코인 선물 가격 (최근 30일)',
-        yaxis_title='가격 (USD)',
+        yaxis_title='가격 (USDT)',
         xaxis_rangeslider_visible=False
     )
 
@@ -60,10 +69,10 @@ def create_graph(df):
 
 # 분석 텍스트 생성 함수
 def create_analysis(df):
-    last_price = df['Close'].iloc[-1]
-    max_price = df['High'].max()
-    min_price = df['Low'].min()
-    price_change = (df['Close'].iloc[-1] - df['Open'].iloc[0]) / df['Open'].iloc[0] * 100
+    last_price = df['close'].iloc[-1]
+    max_price = df['high'].max()
+    min_price = df['low'].min()
+    price_change = (df['close'].iloc[-1] - df['open'].iloc[0]) / df['open'].iloc[0] * 100
 
     analysis_text = f"""
     ## 비트코인 선물 시장 분석
@@ -111,6 +120,6 @@ elif menu == "분석":
 if 'data' in st.session_state:
     with st.sidebar.expander("최근 거래 정보"):
         df = st.session_state['data']
-        st.write(f"최근 종가: ${df['Close'].iloc[-1]:.2f}")
-        st.write(f"30일 최고가: ${df['High'].max():.2f}")
-        st.write(f"30일 최저가: ${df['Low'].min():.2f}")
+        st.write(f"최근 종가: ${df['close'].iloc[-1]:.2f}")
+        st.write(f"30일 최고가: ${df['high'].max():.2f}")
+        st.write(f"30일 최저가: ${df['low'].min():.2f}")
