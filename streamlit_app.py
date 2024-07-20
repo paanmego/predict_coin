@@ -1,8 +1,9 @@
 import streamlit as st
 import ccxt
-import plotly.graph_objs as go
-from datetime import datetime, timedelta
 import pandas as pd
+from datetime import datetime, timedelta
+import time
+import plotly.graph_objs as go
 
 # Streamlit 페이지 설정
 st.set_page_config(page_title="비트코인 선물 분석", layout="wide")

@@ -1,5 +1,6 @@
 streamlit==1.27.2
+ccxt==4.0.112
 plotly==5.17.0
 pandas==2.1.1
 numpy==1.26.0
-ccxt==4.0.112
+python-dateutil==2.8.2
