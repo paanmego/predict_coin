@@ -11,9 +11,22 @@ st.set_page_config(page_title="비트코인 분석(Bryan Cho)", layout="wide")
 # 페이지 제목
 st.title("비트코인 분석 대시보드")
 
-# 사이드바 생성
-st.sidebar.title("메뉴")
+# 메인 사이드바 생성
 main_menu = st.sidebar.radio("메인 메뉴:", ["데이터 로드", "그래프", "분석"])
+
+# 데이터 로드 버튼을 사이드바 상단에 배치
+if st.sidebar.button("데이터 로드"):
+    try:
+        with st.spinner("데이터를 불러오는 중..."):
+            df = get_data()
+        if df is not None:
+            st.session_state['data'] = df.tail(30)  # 최근 30일 데이터만 저장
+            st.sidebar.success("데이터 로드 완료!")
+            st.write(st.session_state['data'])
+        else:
+            st.sidebar.error("데이터를 불러오는데 실패했습니다.")
+    except Exception as e:
+        st.sidebar.error(f"데이터 로드 중 오류 발생: {str(e)}")
 
 # AI 가격 예측 사이드바
 st.sidebar.title("AI 가격 예측")
@@ -46,6 +59,7 @@ if st.sidebar.button("분석"):
     
     st.sidebar.markdown("---")
     st.sidebar.markdown("**현재 분석 알고리즘 수정중**")
+
 cg = CoinGeckoAPI()
 # EMA 계산 함수 추가
 def calculate_ema(data, period, column='close'):
@@ -167,18 +181,10 @@ def create_analysis(df):
 
 # 메인 로직
 if main_menu == "데이터 로드":
-    if st.sidebar.button("데이터 로드"):
-        try:
-            with st.spinner("데이터를 불러오는 중..."):
-                df = get_data()
-            if df is not None:
-                st.session_state['data'] = df
-                st.success("데이터 로드 완료!")
-                st.write(df)
-            else:
-                st.error("데이터를 불러오는데 실패했습니다.")
-        except Exception as e:
-            st.error(f"데이터 로드 중 오류 발생: {str(e)}")
+    if 'data' in st.session_state:
+        st.write(st.session_state['data'])
+    else:
+        st.warning("데이터를 로드해주세요.")
 
 elif main_menu == "그래프":
     if 'data' not in st.session_state:
