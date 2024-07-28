@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 import pandas as pd
+import pytz
 from datetime import datetime, timedelta, timezone
 import time
 import hmac
@@ -20,6 +21,9 @@ API_KEY = os.getenv('API_KEY')
 API_SECRET = os.getenv('API_SECRET')
 API_PASS = os.getenv('API_PASS')
 BASE_URL = os.getenv('BASE_URL')
+
+# 한국 시간대 설정
+korea_tz = pytz.timezone('Asia/Seoul')
 
 # Streamlit 페이지 설정
 st.set_page_config(page_title="비트코인 분석(Bryan Cho)", layout="wide")
@@ -44,6 +48,13 @@ def get_headers(method, request_path):
 # EMA 계산 함수
 def calculate_ema(data, period, column='close'):
     return data[column].ewm(span=period, adjust=False).mean()
+
+def convert_to_korea_time(df):
+    df = df.copy()
+    if df.index.tzinfo is None:
+        df.index = df.index.tz_localize('UTC')
+    df.index = df.index.tz_convert(korea_tz)
+    return df
 
 @st.cache_data(show_spinner=False)
 def get_data(granularity="3600"):
@@ -75,11 +86,12 @@ def get_data(granularity="3600"):
         return None
 
     df = pd.DataFrame(price_data, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'usdVolume'])
-    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms', utc=True)
     df.set_index('timestamp', inplace=True)
     for col in ['open', 'high', 'low', 'close']:
         df[col] = df[col].astype(float)
 
+    df = convert_to_korea_time(df)
     # EMA 계산
     for period in [10, 20, 50, 100]:
         df[f'EMA{period}'] = df['close'].ewm(span=period, adjust=False).mean()
@@ -117,10 +129,18 @@ def create_candlestick_chart(df):
         ))
 
     fig.update_layout(
-        title='비트코인 가격 차트',
+        title='비트코인 가격 차트(한국시간)',
         yaxis_title='가격 (USD)',
         xaxis_title='날짜',
         xaxis_rangeslider_visible=False
+    )
+
+    # x축 시간 포맷 설정
+    fig.update_xaxes(
+        tickformat="%Y-%m-%d %H:%M",
+        tickangle=90,
+        tickmode='auto',
+        nticks=20
     )
 
     return fig
@@ -159,8 +179,8 @@ def get_trade_history():
     url = BASE_URL + request_path
     headers = get_headers('GET', request_path)
     
-    st.write(f"요청 URL: {url}")
-    st.write(f"요청 헤더: {headers}")
+    # st.write(f"요청 URL: {url}")
+    # st.write(f"요청 헤더: {headers}")
     
     try:
         response = requests.get(url, headers=headers)
@@ -269,12 +289,12 @@ if main_menu == "데이터 로드":
         st.warning("데이터를 로드해주세요.")
 
 elif main_menu == "그래프":
-    timeframe = st.selectbox("시간 프레임 선택", ["일봉", "4시간봉", "1시간봉", "15분봉"])
+    timeframe = st.selectbox("시간 프레임 선택", ["일봉", "4시간봉", "1시간봉", "1분봉"])
     granularity_map = {
         "일봉": "86400",
         "4시간봉": "14400",
         "1시간봉": "3600",
-        "15분봉": "900"
+        "1분봉": "60"
     }
     granularity = granularity_map[timeframe]
 
